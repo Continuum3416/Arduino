@@ -1,20 +1,25 @@
-//Automatic Nightlight
-const int RLED=9; //Red LED on pin 9 (PWM)
-const int LIGHT=0; //Lght Sensor on analog pin 0
-const int MIN_LIGHT=200; //Minimum expected light value
-const int MAX_LIGHT=900; //Maximum Expected Light value
-int val = 0; //variable to hold the analog reading
-
-
+const int LED=9;//The LED is connected to pin 9
+const int PIR=2;//The PIR is
 void setup()
 {
-  pinMode(RLED, OUTPUT); //Set LED pin as output
+  Serial.begin(9600);
+  pinMode (LED, OUTPUT);
+  pinMode (PIR, INPUT);
+  digitalWrite(LED,HIGH);
+  delay (500);
+  digitalWrite (LED,LOW);
+  delay (500);
 }
-
 void loop()
 {
-  val = analogRead(LIGHT); //Read the light sensor
-  val = map(val, MIN_LIGHT, MAX_LIGHT, 255, 0);//Map the light reading
-  val = constrain(val, 0, 255); //Constrain light value
-  analogWrite(RLED, val); //Control the LED
+  if (digitalRead(PIR) == LOW)
+  {
+    digitalWrite(LED, LOW);
+    Serial.println("High");
+  }
+  else
+  {
+    digitalWrite(LED, HIGH);
+    Serial.println("Low");
+  }
 }
