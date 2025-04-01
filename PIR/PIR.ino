@@ -1,5 +1,9 @@
-const int LED=8;//The LED is connected to pin 9
+// Don Le, 3/24/25
+// Week 4 Lab
+
+const int LED=9;//The LED is connected to pin 9
 const int PIR=2;//The PIR is connected to pin 2
+
 void setup()
 {
   Serial.begin(9600);

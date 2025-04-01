@@ -28,7 +28,7 @@ void setup() {
   pinMode(RLED, OUTPUT);
   pinMode(BUTTON, INPUT);
   pinMode(BUTTON2, INPUT);
-  Serial.begin(9600);  // Enable serial debugging
+  Serial.begin(9600);
 }
 
 void setMode(int mode) {
@@ -79,9 +79,9 @@ void setMode(int mode) {
 int delayTimes[6] = {0, 500, 1000, 1500, 2000, 2500};
 
 int LED_mode = 0;
-int blinkDelayIndex = 0;
+int blink_delay = 0;
 long previous_time = 0;
-boolean ledOn = true;
+boolean led_on = true;
 
 void loop() {
   // Handle first button (LED mode change)
@@ -97,25 +97,25 @@ void loop() {
   currentButton2 = digitalRead(BUTTON2);
   if (lastButton2 == LOW && currentButton2 == HIGH) {
     delay(50);  // Debounce
-    ++blinkDelayIndex;
-    if (blinkDelayIndex > 5) blinkDelayIndex = 0;
+    ++blink_delay;
+    if (blink_delay > 5) blink_delay = 0;
   }
   lastButton2 = currentButton2;
 
   // Blink logic
   long time_elapsed = millis();
-  int blink_delay = delayTimes[blinkDelayIndex];
+  int blink_delay = delayTimes[blink_delay];
 
-  long deltaTime = time_elapsed - previous_time;
+  long dt = time_elapsed - previous_time;
   if (blink_delay == 0) {
-    ledOn = true;  // No blinking, LED stays ON
-  } else if (deltaTime >= static_cast<long>(blink_delay)) {
+    led_on = true;  // No blinking, LED stays ON
+  } else if (dt >= static_cast<long>(blink_delay)) {
     previous_time = time_elapsed;
-    ledOn = !ledOn;  // Toggle LED state
+    led_on = !led_on;  // Toggle LED state
   }
 
   // Update LEDs
-  if (ledOn) {
+  if (led_on) {
     setMode(LED_mode);
   } else {
     setMode(0);  // Turn off LEDs if blinking
