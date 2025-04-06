@@ -1,0 +1,177 @@
+// pin definitions
+const int LEFT_RED    = 13;
+const int MIDDLE_RED  = 12;
+const int RIGHT_RED   = 11;
+const int LEFT_BLUE   = 10;
+const int MIDDLE_BLUE = 9;
+const int RIGHT_BLUE  = 8;
+const int SPEAKER_PIN = 7;
+const int BUTTON_PIN  = 2;
+const int PIR_PIN     = 3;
+const int SPEAKER2_PIN = 4;
+
+// Mario theme
+int melody[] = {
+  415, 554, 554, 554, 494, 554, 554, 415, 415, 494
+};
+
+int noteDurations[] = {
+  400, 400, 400, 400, 400, 400, 400, 400, 400, 400
+};
+
+//end theme 
+
+
+unsigned long previousNoteTime = 0;
+int currentNote = 0;
+
+unsigned long previousLedTime = 0;
+int ledStep = 0;
+
+bool isRunning = false;
+
+// Button state handling
+bool lastButtonState = HIGH;
+bool currentButtonState = HIGH;
+unsigned long lastDebounceTime = 0;
+const unsigned long debounceDelay = 50;
+
+void setup() {
+  pinMode(LEFT_RED, OUTPUT);
+  pinMode(MIDDLE_RED, OUTPUT);
+  pinMode(RIGHT_RED, OUTPUT);
+  pinMode(LEFT_BLUE, OUTPUT);
+  pinMode(MIDDLE_BLUE, OUTPUT);
+  pinMode(RIGHT_BLUE, OUTPUT);
+  pinMode(SPEAKER_PIN, OUTPUT);
+  pinMode(SPEAKER2_PIN, OUTPUT);
+  pinMode(BUTTON_PIN, INPUT_PULLUP);  // Internal pull-up
+  pinMode(PIR_PIN, INPUT);            // PIR sensor input
+}
+
+void loop() {
+  handleButton();
+
+  handlePIR(); 
+
+  if (isRunning) {
+    updateMelody();
+    updateLeds();
+  } else {
+    stopAll();
+  }
+}
+
+void handlePIR() {
+  if (digitalRead(PIR_PIN) == HIGH) {
+    // Keep playing the gun sound while motion is detected
+    playGunSound();  // One "shot"
+  } else {
+    noTone(SPEAKER2_PIN); // Stop sound immediately when no motion
+  }
+}
+
+// Button toggle logic with debounce
+void handleButton() {
+  int reading = digitalRead(BUTTON_PIN);
+
+  if (reading != lastButtonState) {
+    lastDebounceTime = millis();
+  }
+
+  if ((millis() - lastDebounceTime) > debounceDelay) {
+    if (reading != currentButtonState) {
+      currentButtonState = reading;
+      if (currentButtonState == LOW) {
+        isRunning = !isRunning;
+        if (!isRunning) {
+          currentNote = 0;
+          ledStep = 0;
+        }
+      }
+    }
+  }
+
+  lastButtonState = reading;
+}
+
+// LED animation logic
+void updateLeds() {
+  unsigned long currentTime = millis();
+
+  if (currentTime - previousLedTime >= 100) {
+    previousLedTime = currentTime;
+
+    switch (ledStep) {
+      case 0:
+        digitalWrite(LEFT_RED, HIGH);
+        digitalWrite(MIDDLE_RED, HIGH);
+        digitalWrite(LEFT_BLUE, HIGH);
+        digitalWrite(MIDDLE_BLUE, HIGH);
+        break;
+      case 1:
+        digitalWrite(LEFT_RED, LOW);
+        digitalWrite(MIDDLE_RED, LOW);
+        digitalWrite(LEFT_BLUE, LOW);
+        digitalWrite(MIDDLE_BLUE, LOW);
+        break;
+      case 2:
+        digitalWrite(RIGHT_RED, HIGH);
+        digitalWrite(MIDDLE_RED, HIGH);
+        digitalWrite(RIGHT_BLUE, HIGH);
+        digitalWrite(MIDDLE_BLUE, HIGH);
+        break;
+      case 3:
+        digitalWrite(RIGHT_RED, LOW);
+        digitalWrite(MIDDLE_RED, LOW);
+        digitalWrite(RIGHT_BLUE, LOW);
+        digitalWrite(MIDDLE_BLUE, LOW);
+        break;
+    }
+
+    ledStep = (ledStep + 1) % 4;
+  }
+}
+
+// Music player
+void updateMelody() {
+  unsigned long currentTime = millis();
+
+  if (currentNote < sizeof(melody) / sizeof(int)) {
+    int duration = noteDurations[currentNote];
+
+    if (currentTime - previousNoteTime >= duration * 1.3) {
+      if (melody[currentNote] != 0) {
+        tone(SPEAKER_PIN, melody[currentNote], duration);
+      } else {
+        noTone(SPEAKER_PIN);
+      }
+      previousNoteTime = currentTime;
+      currentNote++;
+    }
+  } else {
+    currentNote = 0;  // Loop
+  }
+}
+
+// Gun sound effect on motion detection
+void playGunSound() {
+  tone(SPEAKER2_PIN, 200, 60); // short high pitch
+  delay(60);
+  tone(SPEAKER2_PIN, 100, 40); // quick drop
+  delay(40);
+  noTone(SPEAKER2_PIN);
+}
+
+// Turn off all outputs
+void stopAll() {
+  noTone(SPEAKER_PIN);
+  noTone(SPEAKER2_PIN);
+
+  digitalWrite(LEFT_RED, LOW);
+  digitalWrite(MIDDLE_RED, LOW);
+  digitalWrite(RIGHT_RED, LOW);
+  digitalWrite(LEFT_BLUE, LOW);
+  digitalWrite(MIDDLE_BLUE, LOW);
+  digitalWrite(RIGHT_BLUE, LOW);
+}
