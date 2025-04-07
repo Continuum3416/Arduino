@@ -15,9 +15,14 @@ int melody[] = {
   415, 554, 554, 554, 494, 554, 554, 415, 415, 494
 };
 
-int noteDurations[] = {
-  400, 400, 400, 400, 400, 400, 400, 400, 400, 400
-};
+int noteDurations[10];
+
+void initialize_array(int *arr, const int size, const int value)
+{
+  for (int i = 0; i < size; i++) {
+  	arr[i] = value;
+  }
+}
 
 //end theme 
 
@@ -30,13 +35,15 @@ int ledStep = 0;
 
 bool isRunning = false;
 
-// Button state handling
+// Button state handlingssssssssssssssssssssssssssssssss
 bool lastButtonState = HIGH;
 bool currentButtonState = HIGH;
 unsigned long lastDebounceTime = 0;
 const unsigned long debounceDelay = 50;
 
 void setup() {
+  Serial.begin(9600);
+  initialize_array(noteDurations, 10, 300);
   pinMode(LEFT_RED, OUTPUT);
   pinMode(MIDDLE_RED, OUTPUT);
   pinMode(RIGHT_RED, OUTPUT);
@@ -66,8 +73,10 @@ void handlePIR() {
   if (digitalRead(PIR_PIN) == HIGH) {
     // Keep playing the gun sound while motion is detected
     playGunSound();  // One "shot"
+    Serial.println("Shooting.");
   } else {
     noTone(SPEAKER2_PIN); // Stop sound immediately when no motion
+    Serial.println("Not shooting.");
   }
 }
 
@@ -165,8 +174,8 @@ void playGunSound() {
 
 // Turn off all outputs
 void stopAll() {
-  noTone(SPEAKER_PIN);
-  noTone(SPEAKER2_PIN);
+  //noTone(SPEAKER_PIN);
+  //noTone(SPEAKER2_PIN);
 
   digitalWrite(LEFT_RED, LOW);
   digitalWrite(MIDDLE_RED, LOW);
