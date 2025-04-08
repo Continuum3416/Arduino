@@ -1,18 +1,18 @@
 // Pin definitions
-const int RED_LEDS[]   = {13, 12, 11};
-const int BLUE_LEDS[]  = {10, 9, 8};
+const int LEFT_RED     = 13;
+const int MIDDLE_RED   = 12;
+const int RIGHT_RED    = 11;
+const int LEFT_BLUE    = 10;
+const int MIDDLE_BLUE  = 9;
+const int RIGHT_BLUE   = 8;
 const int SPEAKER_PIN  = 7;
 const int SPEAKER2_PIN = 4;
 const int BUTTON_PIN   = 2;
 const int PIR_PIN      = 3;
 
-const int NUM_LEDS     = 3;
-const int SONG_LENGTH  = 10;
-const unsigned long DEBOUNCE_DELAY = 50;
-
 // Squid game theme
-int song[SONG_LENGTH] = { 415, 554, 554, 554, 494, 554, 554, 415, 415, 494 };
-int noteDurations[SONG_LENGTH];
+int song[10] = { 415, 554, 554, 554, 494, 554, 554, 415, 415, 494 };
+int noteDurations[10];
 
 // Variables used in loops to detect if the arduino is running
 bool isRunning = false;
@@ -26,46 +26,48 @@ int ledStep = 0;
 bool lastButtonState = HIGH;
 bool currentButtonState = HIGH;
 unsigned long lastDebounceTime = 0;
-
-// Song timing
-unsigned long previousNoteTime = 0;
-int currentNote = 0;
+const unsigned long debounceDelay = 50;
 
 // Function to fill an array with a value
 // Input: pointer to array, array size, and value
 // Used to fill noteDurations with one specific value
-void initialize_array(int *arr, const int size, const int value) {
+void initialize_array(int *arr, const int size, const int value)
+{
   for (int i = 0; i < size; i++) {
     arr[i] = value;
   }
 }
 
-// Setup components
+// setup components
 void setup() {
   Serial.begin(9600);
 
-  // Set note duration to 300ms
-  initialize_array(noteDurations, SONG_LENGTH, 300);
+  // set note duration to 300ms
+  initialize_array(noteDurations, 10, 300);
 
-  for (int i = 0; i < NUM_LEDS; i++) {
-    pinMode(RED_LEDS[i], OUTPUT);
-    pinMode(BLUE_LEDS[i], OUTPUT);
-  }
-
+  pinMode(LEFT_RED, OUTPUT);
+  pinMode(MIDDLE_RED, OUTPUT);
+  pinMode(RIGHT_RED, OUTPUT);
+  pinMode(LEFT_BLUE, OUTPUT);
+  pinMode(MIDDLE_BLUE, OUTPUT);
+  pinMode(RIGHT_BLUE, OUTPUT);
   pinMode(SPEAKER_PIN, OUTPUT);
   pinMode(SPEAKER2_PIN, OUTPUT);
   pinMode(BUTTON_PIN, INPUT_PULLUP);
   pinMode(PIR_PIN, INPUT);
 }
 
+
 void loop() {
   handleButton();
 
-  // If button was toggled on
+  // If is running, AKA the button is turned on
+  // isRunning is set to false initially
   if (isRunning) {
-    // Read from PIR sensor
+    // read from PIR
     motionDetected = digitalRead(PIR_PIN) == HIGH;
 
+    // if there's motion, stop LED, stop song and start blasting those guns
     if (motionDetected) {
       stopLeds();
       stopSong();
@@ -82,18 +84,17 @@ void loop() {
 }
 
 // Button toggle function with debounce
-// When pressed, everything on the circuit gets turned on/off
+unsigned long previousNoteTime = 0;
+int currentNote = 0;
+
 void handleButton() {
-  // read button state
   int reading = digitalRead(BUTTON_PIN);
 
-  // Reset debounce timer if state changed
   if (reading != lastButtonState) {
     lastDebounceTime = millis();
   }
 
-  // If stable for longer than debounce delay
-  if ((millis() - lastDebounceTime) > DEBOUNCE_DELAY) {
+  if ((millis() - lastDebounceTime) > debounceDelay) {
     if (reading != currentButtonState) {
       currentButtonState = reading;
       if (currentButtonState == LOW) {
@@ -111,23 +112,23 @@ void handleButton() {
 // Music player
 void updateSong() {
   unsigned long currentTime = millis();
+  int songLength = sizeof(song) / sizeof(int);
 
-  if (currentNote < SONG_LENGTH) {
+  if (currentNote < songLength) {
     int duration = noteDurations[currentNote];
 
-    // Only play next note if enough time has passed
+    // Prevent debounce
     if (currentTime - previousNoteTime >= duration * 1.3) {
       if (song[currentNote] != 0) {
         tone(SPEAKER_PIN, song[currentNote], duration);
       } else {
         noTone(SPEAKER_PIN);
       }
-
       previousNoteTime = currentTime;
       currentNote++;
     }
   } else {
-    currentNote = 0;  // Loop song
+    currentNote = 0;  // Loop
   }
 }
 
@@ -142,45 +143,47 @@ void updateLeds() {
   if (currentTime - previousLedTime >= 100) {
     previousLedTime = currentTime;
 
-    // Turn on/off LEDs based on animation step
     switch (ledStep) {
       case 0:
-        digitalWrite(RED_LEDS[0], HIGH);
-        digitalWrite(RED_LEDS[1], HIGH);
-        digitalWrite(BLUE_LEDS[0], HIGH);
-        digitalWrite(BLUE_LEDS[1], HIGH);
+        digitalWrite(LEFT_RED, HIGH);
+        digitalWrite(MIDDLE_RED, HIGH);
+        digitalWrite(LEFT_BLUE, HIGH);
+        digitalWrite(MIDDLE_BLUE, HIGH);
         break;
       case 1:
-        digitalWrite(RED_LEDS[0], LOW);
-        digitalWrite(RED_LEDS[1], LOW);
-        digitalWrite(BLUE_LEDS[0], LOW);
-        digitalWrite(BLUE_LEDS[1], LOW);
+        digitalWrite(LEFT_RED, LOW);
+        digitalWrite(MIDDLE_RED, LOW);
+        digitalWrite(LEFT_BLUE, LOW);
+        digitalWrite(MIDDLE_BLUE, LOW);
         break;
       case 2:
-        digitalWrite(RED_LEDS[2], HIGH);
-        digitalWrite(RED_LEDS[1], HIGH);
-        digitalWrite(BLUE_LEDS[2], HIGH);
-        digitalWrite(BLUE_LEDS[1], HIGH);
+        digitalWrite(RIGHT_RED, HIGH);
+        digitalWrite(MIDDLE_RED, HIGH);
+        digitalWrite(RIGHT_BLUE, HIGH);
+        digitalWrite(MIDDLE_BLUE, HIGH);
         break;
       case 3:
-        digitalWrite(RED_LEDS[2], LOW);
-        digitalWrite(RED_LEDS[1], LOW);
-        digitalWrite(BLUE_LEDS[2], LOW);
-        digitalWrite(BLUE_LEDS[1], LOW);
+        digitalWrite(RIGHT_RED, LOW);
+        digitalWrite(MIDDLE_RED, LOW);
+        digitalWrite(RIGHT_BLUE, LOW);
+        digitalWrite(MIDDLE_BLUE, LOW);
         break;
     }
 
-    ledStep = (ledStep + 1) % 4; // Loop animation steps
+    // Loop back
+    ledStep = (ledStep + 1) % 4;
   }
 }
 
 // Stop LED animation
-// Set all LEDs to LOW
+// set output to LOW
 void stopLeds() {
-  for (int i = 0; i < NUM_LEDS; i++) {
-    digitalWrite(RED_LEDS[i], LOW);
-    digitalWrite(BLUE_LEDS[i], LOW);
-  }
+  digitalWrite(LEFT_RED, LOW);
+  digitalWrite(MIDDLE_RED, LOW);
+  digitalWrite(RIGHT_RED, LOW);
+  digitalWrite(LEFT_BLUE, LOW);
+  digitalWrite(MIDDLE_BLUE, LOW);
+  digitalWrite(RIGHT_BLUE, LOW);
 }
 
 // Gun sound effect
