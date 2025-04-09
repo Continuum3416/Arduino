@@ -1,27 +1,3 @@
-// Don, Vivian, Felix
-// 04/08/2025
-//
-// Red Light, Green Light Game Simulation (Inspired by Squid Game)
-//
-// Overview:
-// This program simulates the popular "Red Light, Green Light" game,
-// as seen in Squid Game. The player must advance towards a target
-// without being caught moving during a "Red Light" signal.
-//
-// Game Rules:
-// - The player starts at a distance from the target (e.g., a button).
-// - A signal light switches between RED and GREEN every 3 seconds.
-// - When the signal is GREEN, the player is allowed to move forward.
-// - When the signal turns RED, the player must freeze immediately.
-//   Moving during RED results in elimination (being "shot").
-// - The goal is to reach the target and press the button without
-//   being eliminated.
-//
-// Victory Condition:
-// - The player wins by successfully reaching the target and
-//   pressing the button during a GREEN light phase.
-
-
 // Pin definitions
 const int RED_LEDS[]   = {13, 12, 11};
 const int BLUE_LEDS[]  = {10, 9, 8};
@@ -29,53 +5,44 @@ const int SPEAKER_PIN  = 7;
 const int SPEAKER2_PIN = 4;
 const int BUTTON_PIN   = 2;
 const int PIR_PIN      = 3;
-const int RED_RGB_PIN  = 6;  // RGB LED red pin
-const int GREEN_RGB_PIN = 5; // RGB LED green pin
+const int GREEN_LED    = 5;
+const int RED_LED      = 6;
 
 const int NUM_LEDS     = 3;
 const int SONG_LENGTH  = 10;
 const unsigned long DEBOUNCE_DELAY = 50;
+const unsigned long GAME_PHASE_DURATION = 3000; // 3 seconds
 
-// Squid game theme
+// Song
 int song[SONG_LENGTH] = { 415, 554, 554, 554, 494, 554, 554, 415, 415, 494 };
 int noteDurations[SONG_LENGTH];
 
-// Variables used in loops to detect if the arduino is running
+// State flags
 bool isRunning = false;
 bool motionDetected = false;
+bool isGreenPhase = true;
 
-// LED animation logic
+// Timing
 unsigned long previousLedTime = 0;
+unsigned long previousNoteTime = 0;
+unsigned long lastPhaseSwitchTime = 0;
+int currentNote = 0;
 int ledStep = 0;
 
-// Variables for button state handling
+// Button state
 bool lastButtonState = HIGH;
 bool currentButtonState = HIGH;
 unsigned long lastDebounceTime = 0;
 
-// Song timing
-unsigned long previousNoteTime = 0;
-int currentNote = 0;
-
-// Timer control variables
-bool isGreenPhase = true;  // Green phase (go) or red phase (stop)
-unsigned long lastPhaseTime = 0;
-const unsigned long PHASE_DURATION = 5000; // 5 seconds for each phase
-
-// Function to fill an array with a value
-// Input: pointer to array, array size, and value
-// Used to fill noteDurations with one specific value
+// Helper
 void initialize_array(int *arr, const int size, const int value) {
   for (int i = 0; i < size; i++) {
     arr[i] = value;
   }
 }
 
-// Setup components
 void setup() {
   Serial.begin(9600);
-
-  // Set note duration to 300ms
   initialize_array(noteDurations, SONG_LENGTH, 300);
 
   for (int i = 0; i < NUM_LEDS; i++) {
@@ -87,44 +54,36 @@ void setup() {
   pinMode(SPEAKER2_PIN, OUTPUT);
   pinMode(BUTTON_PIN, INPUT_PULLUP);
   pinMode(PIR_PIN, INPUT);
-  
-  // Set up RGB LED pins
-  pinMode(RED_RGB_PIN, OUTPUT);
-  pinMode(GREEN_RGB_PIN, OUTPUT);
-  digitalWrite(RED_RGB_PIN, LOW);
-  digitalWrite(GREEN_RGB_PIN, LOW);
+  pinMode(GREEN_LED, OUTPUT);
+  pinMode(RED_LED, OUTPUT);
+
+  digitalWrite(GREEN_LED, LOW);
+  digitalWrite(RED_LED, LOW);
 }
 
 void loop() {
   handleButton();
 
-  // If button was toggled on
   if (isRunning) {
-    // Update timer for green/red phase switching
-    unsigned long currentTime = millis();
-    if (currentTime - lastPhaseTime >= PHASE_DURATION) {
-      lastPhaseTime = currentTime;
-      isGreenPhase = !isGreenPhase;  // Switch phase
-    }
+    updateGamePhase();
 
-    // Handle movement (PIR detection)
     if (isGreenPhase) {
-      // Green light - allow movement
-      digitalWrite(GREEN_RGB_PIN, HIGH);
-      digitalWrite(RED_RGB_PIN, LOW);
-      motionDetected = false;  // Disable motion detection in "Go" phase
-      Serial.println("Green light: You can move.");
+      // Green phase: movement allowed
+      digitalWrite(GREEN_LED, HIGH);
+      digitalWrite(RED_LED, LOW);
+      Serial.println("Green light! You can move.");
     } else {
-      // Red light - stop movement, enable PIR
-      digitalWrite(GREEN_RGB_PIN, LOW);
-      digitalWrite(RED_RGB_PIN, HIGH);
+      // Red phase: no movement allowed
+      digitalWrite(GREEN_LED, LOW);
+      digitalWrite(RED_LED, HIGH);
+
       motionDetected = digitalRead(PIR_PIN) == HIGH;
 
       if (motionDetected) {
         stopLeds();
         stopSong();
         playGunSound();
-        Serial.println("Red light: Motion detected! Game over!");
+        Serial.println("🔫 You moved! Game over!");
       } else {
         updateSong();
         updateLeds();
@@ -133,22 +92,31 @@ void loop() {
     }
   } else {
     stopAll();
+    digitalWrite(GREEN_LED, LOW);
+    digitalWrite(RED_LED, LOW);
   }
 }
 
-// Button toggle function with debounce
-// When pressed, everything on the circuit gets turned on/off
-// Controls isRunning
-void handleButton() {
-  // read button state
-  int reading = digitalRead(BUTTON_PIN);
+void updateGamePhase() {
+  unsigned long currentTime = millis();
+  if (currentTime - lastPhaseSwitchTime >= GAME_PHASE_DURATION) {
+    isGreenPhase = !isGreenPhase; // Toggle phase
+    lastPhaseSwitchTime = currentTime;
 
-  // Reset debounce timer if state changed
+    if (!isGreenPhase) {
+      Serial.println("Red Light!");
+    } else {
+      Serial.println("Green Light!");
+    }
+  }
+}
+
+void handleButton() {
+  int reading = digitalRead(BUTTON_PIN);
   if (reading != lastButtonState) {
     lastDebounceTime = millis();
   }
 
-  // If stable for longer than debounce delay
   if ((millis() - lastDebounceTime) > DEBOUNCE_DELAY) {
     if (reading != currentButtonState) {
       currentButtonState = reading;
@@ -156,6 +124,8 @@ void handleButton() {
         isRunning = !isRunning;
         currentNote = 0;
         ledStep = 0;
+        isGreenPhase = true;
+        lastPhaseSwitchTime = millis();
         stopAll();
       }
     }
@@ -164,41 +134,28 @@ void handleButton() {
   lastButtonState = reading;
 }
 
-// Music player
 void updateSong() {
   unsigned long currentTime = millis();
-
   if (currentNote < SONG_LENGTH) {
     int duration = noteDurations[currentNote];
-
-    // Only play next note if enough time has passed
     if (currentTime - previousNoteTime >= duration * 1.3) {
       if (song[currentNote] != 0) {
         tone(SPEAKER_PIN, song[currentNote], duration);
       } else {
         noTone(SPEAKER_PIN);
       }
-
       previousNoteTime = currentTime;
       currentNote++;
     }
   } else {
-    currentNote = 0;  // Loop song
+    currentNote = 0;
   }
 }
 
-void stopSong() {
-  noTone(SPEAKER_PIN);
-}
-
-// LED animation
 void updateLeds() {
   unsigned long currentTime = millis();
-
   if (currentTime - previousLedTime >= 100) {
     previousLedTime = currentTime;
-
-    // Turn on/off LEDs based on animation step
     switch (ledStep) {
       case 0:
         digitalWrite(RED_LEDS[0], HIGH);
@@ -225,14 +182,10 @@ void updateLeds() {
         digitalWrite(BLUE_LEDS[1], LOW);
         break;
     }
-	
-    // to alternate pattern
-    ledStep = (ledStep + 1) % 4; // Loop animation steps
+    ledStep = (ledStep + 1) % 4;
   }
 }
 
-// Stop LED animation
-// Set all LEDs to LOW
 void stopLeds() {
   for (int i = 0; i < NUM_LEDS; i++) {
     digitalWrite(RED_LEDS[i], LOW);
@@ -240,7 +193,10 @@ void stopLeds() {
   }
 }
 
-// Gun sound effect
+void stopSong() {
+  noTone(SPEAKER_PIN);
+}
+
 void playGunSound() {
   tone(SPEAKER2_PIN, 200, 60);
   delay(60);
@@ -249,11 +205,8 @@ void playGunSound() {
   noTone(SPEAKER2_PIN);
 }
 
-// Turn off everything
 void stopAll() {
   stopLeds();
   stopSong();
   noTone(SPEAKER2_PIN);
-  digitalWrite(RED_RGB_PIN, LOW);
-  digitalWrite(GREEN_RGB_PIN, LOW);
 }

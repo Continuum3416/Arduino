@@ -1,27 +1,3 @@
-// Don, Vivian, Felix
-// 04/08/2025
-//
-// Red Light, Green Light Game Simulation (Inspired by Squid Game)
-//
-// Overview:
-// This program simulates the popular "Red Light, Green Light" game,
-// as seen in Squid Game. The player must advance towards a target
-// without being caught moving during a "Red Light" signal.
-//
-// Game Rules:
-// - The player starts at a distance from the target (e.g., a button).
-// - A signal light switches between RED and GREEN every 3 seconds.
-// - When the signal is GREEN, the player is allowed to move forward.
-// - When the signal turns RED, the player must freeze immediately.
-//   Moving during RED results in elimination (being "shot").
-// - The goal is to reach the target and press the button without
-//   being eliminated.
-//
-// Victory Condition:
-// - The player wins by successfully reaching the target and
-//   pressing the button during a GREEN light phase.
-
-
 // Pin definitions
 const int RED_LEDS[]   = {13, 12, 11};
 const int BLUE_LEDS[]  = {10, 9, 8};
@@ -109,13 +85,13 @@ void loop() {
 
     // Handle movement (PIR detection)
     if (isGreenPhase) {
-      // Green light - allow movement
+      // Green light — allow movement
       digitalWrite(GREEN_RGB_PIN, HIGH);
       digitalWrite(RED_RGB_PIN, LOW);
       motionDetected = false;  // Disable motion detection in "Go" phase
-      Serial.println("Green light: You can move.");
+      Serial.println("Green light! You can move.");
     } else {
-      // Red light - stop movement, enable PIR
+      // Red light — stop movement, enable PIR
       digitalWrite(GREEN_RGB_PIN, LOW);
       digitalWrite(RED_RGB_PIN, HIGH);
       motionDetected = digitalRead(PIR_PIN) == HIGH;
@@ -124,7 +100,7 @@ void loop() {
         stopLeds();
         stopSong();
         playGunSound();
-        Serial.println("Red light: Motion detected! Game over!");
+        Serial.println("You moved! Game over!");
       } else {
         updateSong();
         updateLeds();
@@ -138,7 +114,6 @@ void loop() {
 
 // Button toggle function with debounce
 // When pressed, everything on the circuit gets turned on/off
-// Controls isRunning
 void handleButton() {
   // read button state
   int reading = digitalRead(BUTTON_PIN);
@@ -225,8 +200,7 @@ void updateLeds() {
         digitalWrite(BLUE_LEDS[1], LOW);
         break;
     }
-	
-    // to alternate pattern
+
     ledStep = (ledStep + 1) % 4; // Loop animation steps
   }
 }
