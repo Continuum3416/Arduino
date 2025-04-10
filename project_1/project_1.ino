@@ -62,6 +62,7 @@ bool isGreenPhase = true;  // Green phase (go) or red phase (stop)
 unsigned long lastPhaseTime = 0;
 const unsigned long PHASE_DURATION = 5000; // 5 seconds for each phase
 
+// Author: Don
 // Function to fill an array with a value
 // Input: pointer to array, array size, and value
 // Used to fill noteDurations with one specific value
@@ -71,6 +72,7 @@ void initialize_array(int *arr, const int size, const int value) {
   }
 }
 
+// Author: Vivian and Don
 // Setup components
 void setup() {
   Serial.begin(9600);
@@ -95,6 +97,8 @@ void setup() {
   digitalWrite(GREEN_RGB_PIN, LOW);
 }
 
+
+// Author: Don
 void loop() {
   handleButton();
 
@@ -136,6 +140,7 @@ void loop() {
   }
 }
 
+// Author: Don
 // Button toggle function with debounce
 // When pressed, everything on the circuit gets turned on/off
 // Controls isRunning
@@ -164,6 +169,7 @@ void handleButton() {
   lastButtonState = reading;
 }
 
+// Author: Vivian
 // Music player
 void updateSong() {
   unsigned long currentTime = millis();
@@ -191,6 +197,7 @@ void stopSong() {
   noTone(SPEAKER_PIN);
 }
 
+// Author: Vivian
 // LED animation
 void updateLeds() {
   unsigned long currentTime = millis();
@@ -231,6 +238,7 @@ void updateLeds() {
   }
 }
 
+// Author: Don
 // Stop LED animation
 // Set all LEDs to LOW
 void stopLeds() {
@@ -240,6 +248,7 @@ void stopLeds() {
   }
 }
 
+// Author: Don
 // Gun sound effect
 void playGunSound() {
   tone(SPEAKER2_PIN, 200, 60);
@@ -249,6 +258,7 @@ void playGunSound() {
   noTone(SPEAKER2_PIN);
 }
 
+// Author: Don
 // Turn off everything
 void stopAll() {
   stopLeds();
