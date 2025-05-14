@@ -1,81 +1,99 @@
-int joyXpin = A0;
-int joyYpin = A1;
+// Motor A pins
+#define ENA 10
+#define IN1 9
+#define IN2 8
 
-int xVal;
-int yVal;
+// Motor B pins
+#define ENB 5
+#define IN3 6
+#define in4 7
 
-int ENApin = 5;        // speed for right motor
-int IN1pin = 6;        // motor right forward
-int IN2pin = 7;        // motor right backward
+// Joystick pins
+#define joyX A0
+#define joyY A1
 
-int IN3pin = 8;        // motor left forward
-int IN4pin = 9;        // motor left backward
-int ENBpin = 10;       // speed for left motor
-
+const int deadZone = 20;      // Joystick dead zone
+float speedMultiplier = 0.8;  // Global speed control (0.0 to 1.0)
 
 void setup() {
-  pinMode(joyXpin, INPUT);
-  pinMode(joyYpin, INPUT);
-  pinMode(IN1pin, OUTPUT);
-  pinMode(IN2pin, OUTPUT);
-  pinMode(IN3pin, OUTPUT);
-  pinMode(IN4pin, OUTPUT);
-  pinMode(ENBpin, OUTPUT);
-  pinMode(ENApin, OUTPUT);
+  pinMode(ENA, OUTPUT);
+  pinMode(IN1, OUTPUT);
+  pinMode(IN2, OUTPUT);
+
+  pinMode(ENB, OUTPUT);
+  pinMode(IN3, OUTPUT);
+  pinMode(in4, OUTPUT);
+
+  Serial.begin(9600);
 }
 
 void loop() {
-  xVal = analogRead(joyXpin); 
-  yVal = analogRead(joyYpin);
+  int rawX = analogRead(joyX);
+  int rawY = analogRead(joyY);
+  int x = rawX - 512;
+  int y = rawY - 512;
 
-  // Reset all motors (default to off)
-  digitalWrite(IN1pin, LOW);
-  digitalWrite(IN2pin, LOW);
-  digitalWrite(IN3pin, LOW);
-  digitalWrite(IN4pin, LOW);
-  analogWrite(ENApin, 0);
-  analogWrite(ENBpin, 0);
+  if (abs(x) < deadZone) x = 0;
+  if (abs(y) < deadZone) y = 0;
 
-  // Joystick - forward (up)
-  if (yVal < 480) {
-    int motorSpeed = map(yVal, 480, 0, 70, 255);
-    digitalWrite(IN1pin, HIGH);
-    digitalWrite(IN2pin, LOW);
-    digitalWrite(IN3pin, HIGH);
-    digitalWrite(IN4pin, LOW);
-    analogWrite(ENApin, motorSpeed);
-    analogWrite(ENBpin, motorSpeed);
-  }
-  // Joystick - backward (down)
-  else if (yVal > 540) {
-    int motorSpeed = map(yVal, 540, 1023, 70, 255);
-    digitalWrite(IN1pin, LOW);
-    digitalWrite(IN2pin, HIGH);
-    digitalWrite(IN3pin, LOW);
-    digitalWrite(IN4pin, HIGH);
-    analogWrite(ENApin, motorSpeed);
-    analogWrite(ENBpin, motorSpeed);
-  }
-  // Joystick - left (sharp turn with differential steering)
-  else if (xVal < 480) {
-    int motorSpeed = map(xVal, 480, 0, 150, 255);   // Higher minimum speed for sharper turn
-    digitalWrite(IN1pin, LOW);                       // Right motor backward
-    digitalWrite(IN2pin, HIGH);
-    digitalWrite(IN3pin, HIGH);                      // Left motor forward
-    digitalWrite(IN4pin, LOW);
-    analogWrite(ENApin, motorSpeed);                 // Right motor at increased speed
-    analogWrite(ENBpin, motorSpeed);                 // Left motor at increased speed
-  }
-  // Joystick - right (sharp turn with differential steering)
-  else if (xVal > 540) {
-    int motorSpeed = map(xVal, 540, 1023, 150, 255); // Higher minimum speed for sharper turn
-    digitalWrite(IN1pin, HIGH);                      // Right motor forward
-    digitalWrite(IN2pin, LOW);
-    digitalWrite(IN3pin, LOW);                       // Left motor backward
-    digitalWrite(IN4pin, HIGH);
-    analogWrite(ENApin, motorSpeed);                 // Right motor at increased speed
-    analogWrite(ENBpin, motorSpeed);                 // Left motor at increased speed
-  }
-  
+  int speedA = 0;
+  int speedB = 0;
 
+  if (y != 0) {
+    bool forward = (y > 0);
+    int baseSpeed = map(abs(y), 0, 512, 0, 255) * speedMultiplier;
+
+    if (x < 0) {
+      speedA = map(abs(x), 0, 512, baseSpeed, 0);
+      speedB = baseSpeed;
+    } else if (x > 0) {
+      speedA = baseSpeed;
+      speedB = map(abs(x), 0, 512, baseSpeed, 0);
+    } else {
+      speedA = baseSpeed;
+      speedB = baseSpeed;
+    }
+
+    setMotorA(forward);
+    setMotorB(forward);
+  }
+  else if (x != 0) {
+    int turnSpeed = map(abs(x), 0, 512, 0, 255) * speedMultiplier;
+    if (x < 0) {
+      setMotorA(false);
+      setMotorB(true);
+    } else {
+      setMotorA(true);
+      setMotorB(false);
+    }
+    speedA = turnSpeed;
+    speedB = turnSpeed;
+  }
+  else {
+    speedA = 0;
+    speedB = 0;
+    stopMotors();
+  }
+
+  analogWrite(ENA, speedA);
+  analogWrite(ENB, speedB);
+}
+
+void stopMotors() {
+  digitalWrite(IN1, LOW);
+  digitalWrite(IN2, LOW);
+  digitalWrite(IN3, LOW);
+  digitalWrite(in4, LOW);
+  analogWrite(ENA, 0);
+  analogWrite(ENB, 0);
+}
+
+void setMotorA(bool forward) {
+  digitalWrite(IN1, forward ? HIGH : LOW);
+  digitalWrite(IN2, forward ? LOW : HIGH);
+}
+
+void setMotorB(bool forward) {
+  digitalWrite(IN3, forward ? HIGH : LOW);
+  digitalWrite(in4, forward ? LOW : HIGH);
 }
