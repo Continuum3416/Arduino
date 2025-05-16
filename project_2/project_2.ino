@@ -1,5 +1,18 @@
-// Author: Don D. Le
-// 5/13/2025
+/*
+ * Author: Don D. Le
+ * Date: May 13, 2025
+ *
+ * Description:
+ * This code is part of a car and sensor project that integrates multiple hardware components
+ * for data collection, control, and display. It includes the following features:
+ *
+ * - BME280 sensor for measuring and recording temperature, pressure, altitude, and humidity
+ * - Motor, H-bridge and joystick control for vehicle movement
+ * - Data logging to both an SD card and the serial monitor
+ * - Real-time data display on an LCD screen
+ * - GPS module for location tracking (longitude and latitude)
+ * - Real-time clock (RTC) for accurate date and time display
+ */
 
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
@@ -90,6 +103,10 @@ void setup() {
   lcd.print("System Ready");
   delay(1000);
 }
+
+//////////////////////////////////////////////////////////
+// Victor helped me with the joystick in the code below //
+//////////////////////////////////////////////////////////
 
 void loop() {
   // ---- Joystick Car Control ----
