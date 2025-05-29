@@ -1,0 +1,9 @@
+Match found at position: 261
+Match found at position: 329
+Match found at position: 588
+Match found at position: 612
+Match found at position: 925
+Match found at position: 1286
+Match found at position: 1310
+Match found at position: 1874
+Total occurrences: 8
