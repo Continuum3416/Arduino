@@ -20,7 +20,7 @@ void setup()
   pinMode(pinIRd_2,INPUT);
   pinMode(pinIRa_2,INPUT);
   pinMode(pinLED_2,OUTPUT);
-  Serial.print("Aanalog Reading\t Digital Reading");
+  Serial.print("Aanalog Reading\t Digital Reading\n");
 }
 
 void loop()
@@ -30,7 +30,7 @@ void loop()
   Serial.print(" D1=");
   Serial.println(IRvalueD_1);
 
-  Serial.print("\tA2=");
+  Serial.print("A2=");
   Serial.print(IRvalueA_2);
   Serial.print(" D2=");
   Serial.println(IRvalueD_2);
