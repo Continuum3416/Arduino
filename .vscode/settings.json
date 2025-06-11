@@ -5,5 +5,8 @@
     "editor.tabSize": 2,
     "editor.insertSpaces": true,
     "editor.detectIndentation": false,
-    "cmake.sourceDirectory": "D:/Documents/Arduino/Adafruit_BusIO",
+    "cmake.sourceDirectory": "D:/System-Programming/Arduino/Adafruit_BusIO",
+    "files.associations": {
+      "ostream": "cpp"
+    },
 }

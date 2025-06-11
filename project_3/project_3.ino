@@ -4,20 +4,26 @@
 
 // MOTOR LEFT PINS
 #define ENA 10
-#define IN1 8
-#define IN2 9
+#define IN1 9
+#define IN2 8
 
 // MOTOR RIGHT PINS
-#define ENB 3
 #define IN3 7
-#define IN4 4
+#define IN4 6
+#define ENB 5
 
-#define MINIMUM_MOTOR_SPEED 40
+#define MINIMUM_MOTOR_SPEED 10
+#define MAXIMUM_MOTOR_SPEED 140
 
-#define rXPin 12
-#define tXPin 13
+#define rXPin 4 // connect rx to tx
+#define tXPin 3 // connect tx to rx
 SoftwareSerial SSerial(rXPin, tXPin);
 MicroBlueManager manager(SSerial);
+
+
+// Potentiometer
+#define DEADZONE 50 // Steering deadzone, adjust as needed
+#define POT_PIN A4
 
 // Predeclare functions
 void setMotorPins();
@@ -37,13 +43,6 @@ void setup()
 void loop() {
   // Read a message from BLE
   MicroBlueMessage msg = manager.read();
-  Serial.println("Hello");
-  
-  // Print message details if both ID and Value are valid
-  if (msg.hasId() && msg.hasValue()) {
-    Serial.println(msg.toString());
-  }
-
   // Check for a specific message ID to control drive system
   if (msg.id == "d1"){
     int throttle, steering;
@@ -52,6 +51,12 @@ void loop() {
     // Adjust values to center at 0 (assuming incoming range of 0-1023)
     throttle -= 512;
     steering -= 512;
+
+    // Print the raw and centered values
+    // Serial.print("X (Steering): ");
+    // Serial.print(steering + 512);
+    // Serial.print("\tY (Throttle): ");
+    // Serial.println(throttle + 512);
     drive(throttle, steering);
   }
 }
@@ -68,14 +73,14 @@ void setMotorPins()
   pinMode(IN4, OUTPUT);
 }
 
-// Converts throttle and steering inputs into PWM signals for motors
 void drive(int throttle, int steering)
 {
-  // Print Debug Info
-  Serial.print("throttle: ");
-  Serial.print(throttle);
-  Serial.print("\tsteering: ");
-  Serial.print(steering);
+  // Read the potentiometer value (0 to 1023)
+  int potValue = analogRead(POT_PIN);
+
+  // Map the potentiometer value to a range between 100 and 255 for max speed
+  int maxSpeed = map(potValue, 0, 1023, 30, 255);
+  Serial.println(maxSpeed);
 
   // Brake if throttle is zero
   if (throttle == 0)
@@ -84,48 +89,47 @@ void drive(int throttle, int steering)
     return;
   }
 
-  // Set motor direction based on throttle value
-  if (throttle > 0)
-    motorSetForward();
-  else
-    motorSetBackward();
+  // Apply the deadzone to steering
+  if (abs(steering) < DEADZONE) {
+    steering = 0;  // Ignore small steering movements
+  }
 
-  // Map throttle to PWM range.
-  int mappedSpeed = map(abs(throttle), 0, 512, MINIMUM_MOTOR_SPEED, 255);
+  // Set motor direction based on throttle value
+  if (throttle > 0) {
+    motorSetForward();  // Both motors move forward if throttle is positive
+  } else {
+    motorSetBackward();  // Both motors move backward if throttle is negative
+  }
+
+  // Map throttle to PWM range based on maxSpeed.
+  int mappedSpeed = map(abs(throttle), 0, 512, MINIMUM_MOTOR_SPEED, maxSpeed);
 
   // Map steering to PWM range.
   int reducedSpeed = map(abs(steering), 0, 512, mappedSpeed, MINIMUM_MOTOR_SPEED);
 
-  int leftMotorSpeed, rightMotorSpeed;
-  if (steering > 0)
-  {
-    Serial.println("Turning right");
-    // Turn Right: reduce right motor speed
-    leftMotorSpeed = mappedSpeed;
+  int leftMotorSpeed = mappedSpeed;
+  int rightMotorSpeed = mappedSpeed;
+
+  if (steering > 0) {
+    // Turning right: reduce right motor speed
     rightMotorSpeed = reducedSpeed;
+    leftMotorSpeed = mappedSpeed;
   }
-  else
-  {
-    // Turn Left: reduce left motor speed
-     Serial.println("Turning left");
+  else if (steering < 0) {
+    // Turning left: reduce left motor speed
     leftMotorSpeed = reducedSpeed;
     rightMotorSpeed = mappedSpeed;
   }
 
+  // Ensure the speeds are within the PWM range
+  leftMotorSpeed = constrain(leftMotorSpeed, MINIMUM_MOTOR_SPEED, maxSpeed);
+  rightMotorSpeed = constrain(rightMotorSpeed, MINIMUM_MOTOR_SPEED, maxSpeed);
+
   // Set motor speeds
   analogWrite(ENA, leftMotorSpeed);
   analogWrite(ENB, rightMotorSpeed);
-
-  // Print Debug Info
-  Serial.print("\tmappedSpeed: ");
-  Serial.print(mappedSpeed);
-  Serial.print("\treducedSpeed: ");
-  Serial.print(reducedSpeed);
-  Serial.print("\tleftMotorSpeed: ");
-  Serial.print(leftMotorSpeed);
-  Serial.print("\trightMotorSpeed: ");
-  Serial.println(rightMotorSpeed);
 }
+
 
 // stop/brake
 void motorBrake()
@@ -138,8 +142,8 @@ void motorBrake()
   digitalWrite(IN4, LOW);
 }
 
-// move forward
-void motorSetForward()
+// move backward
+void motorSetBackward()
 {
   digitalWrite(ENA, HIGH);
   digitalWrite(ENB, HIGH);
@@ -149,8 +153,8 @@ void motorSetForward()
   digitalWrite(IN4, HIGH);
 }
 
-// move backward
-void motorSetBackward()
+// move forward
+void motorSetForward()
 {
   digitalWrite(ENA, HIGH);
   digitalWrite(ENB, HIGH);
