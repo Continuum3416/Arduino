@@ -1,0 +1,91 @@
+void drive(int throttle, int steering, int potValue) {
+// Check distance for collision avoidance
+float distance = readDistance();
+Serial.println(distance);
+
+// If moving forward and too close to obstacle, stop immediately
+if (throttle > 0 && distance < COLLISION_DISTANCE) {
+motorBrake();
+Serial.println("COLLISION AVOIDANCE - STOPPING!");
+return; // Exit function without driving
+}
+
+// Map the potentiometer value to a range between 100 and 255 for max speed
+int maxSpeed = map(potValue, 0, 100, 20, 255);
+
+// Reduce speed if approaching obstacle while moving forward
+if (throttle > 0 && distance < WARNING_DISTANCE) {
+maxSpeed = maxSpeed * 0.5; // Reduce max speed to 60%
+Serial.println("WARNING - Obstacle detected, reducing speed");
+}
+
+// Brake if throttle is zero
+if (throttle == 0) {
+motorBrake();
+return;
+}
+
+// Apply the deadzone to steering
+if (abs(steering) < DEADZONE) {
+steering = 0; // Ignore small steering movements
+}
+
+// Set motor direction based on throttle value
+if (throttle > 0) {
+motorSetForward(); // Both motors move forward if throttle is positive
+} else {
+motorSetBackward(); // Both motors move backward if throttle is negative
+}
+
+// Map throttle to PWM range based on maxSpeed.
+int mappedSpeed = map(abs(throttle), 0, 512, MINIMUM_MOTOR_SPEED, maxSpeed);
+
+// Map steering to PWM range.
+int reducedSpeed = map(abs(steering), 0, 512, mappedSpeed, MINIMUM_MOTOR_SPEED);
+
+// Right motor is faster, so I reduced its speed
+int leftMotorSpeed = mappedSpeed;
+int rightMotorSpeed = 0.65 * mappedSpeed;
+
+Serial.println(mappedSpeed);
+
+/////////////////// ACCELERATION ////////////////////
+
+// Compute average speed used as velocity approximation
+float currentSpeed = (leftMotorSpeed + rightMotorSpeed) / 2.0;
+
+// Time tracking
+unsigned long currentTime = millis();
+float deltaTime = (currentTime - prevTime) / 1000.0; // Convert ms to seconds
+
+// Avoid division by zero and calculate acceleration
+if (deltaTime > 0) {
+float acceleration = (currentSpeed - prevSpeed) / deltaTime;
+Serial.print("Acceleration: ");
+Serial.print(acceleration);
+Serial.println(" PWM/s");
+
+// Update previous values
+prevSpeed = currentSpeed;
+prevTime = currentTime;
+}
+/////////////////////////////////////////////////////
+
+if (steering > 0) {
+// Turning right: reduce right motor speed
+rightMotorSpeed = reducedSpeed;
+leftMotorSpeed = mappedSpeed;
+} else if (steering < 0) {
+// Turning left: reduce left motor speed
+leftMotorSpeed = reducedSpeed;
+rightMotorSpeed = mappedSpeed;
+}
+
+// Ensure the speeds are within the PWM range
+leftMotorSpeed = constrain(leftMotorSpeed, MINIMUM_MOTOR_SPEED, maxSpeed);
+rightMotorSpeed = constrain(rightMotorSpeed, MINIMUM_MOTOR_SPEED, maxSpeed);
+
+// Set motor speeds
+analogWrite(ENA, leftMotorSpeed);
+analogWrite(ENB, rightMotorSpeed);
+}
