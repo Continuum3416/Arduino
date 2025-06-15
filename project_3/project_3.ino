@@ -1,124 +1,142 @@
+/*
+  ===============================================
+  Author      : Don D. Le
+  Date        : June 12, 2025
+  Description : Arduino Rover with Bluetooth Joystick Control,
+                Line Tracking, Collision Avoidance, and 
+                Acceleration Calculation and Logging via 
+                Ultrasonic Sensor.
+
+  How it works:
+    - MANUAL Mode: Controlled using Bluetooth joystick (MicroBlue).
+    - AUTONOMOUS Mode: Uses line sensors to follow a path.
+    - Ultrasonic sensor detects obstacles and prevents collisions.
+    - Distance readings are used to compute velocity and acceleration,
+      which are logged to an SD card as CSV.
+  ===============================================
+*/
+
 #include "MicroBlue.h"
 #include "SoftwareSerial.h"
 #include "Arduino.h"
 #include <SD.h>
 
-// MOTOR LEFT PINS
-#define ENA 10
-#define IN1 9
-#define IN2 8
+// ========== Motor Pins ==========
+#define ENA 10     // Left motor enable
+#define IN1 9      // Left motor input 1
+#define IN2 8      // Left motor input 2
+#define IN3 7      // Right motor input 1
+#define IN4 6      // Right motor input 2
+#define ENB 5      // Right motor enable
 
-// MOTOR RIGHT PINS
-#define IN3 7
-#define IN4 6
-#define ENB 5
+#define MINIMUM_MOTOR_SPEED 20  // Prevents motors from stalling
 
-#define MINIMUM_MOTOR_SPEED 10
-
-#define rXPin A4  // connect rx to tx
-#define tXPin A3  // connect tx to rx
+// ========== Bluetooth ==========
+#define rXPin A4   // Bluetooth RX pin
+#define tXPin A3   // Bluetooth TX pin
 SoftwareSerial SSerial(rXPin, tXPin);
 MicroBlueManager manager(SSerial);
 
-// ultrasonic
-#define ECHO_PIN 2
+// ========== Ultrasonic Sensor ==========
 #define TRIG_PIN 3
+#define ECHO_PIN 2
 
-// Potentiometer
-#define DEADZONE 50  // Steering deadzone, adjust as needed
-#define POT_PIN 2
+// ========== Line Sensors ==========
+#define left_sensor A0
+#define right_sensor A1
+#define LINE_THRESHOLD 500  // Analog value below this is considered "on line"
 
-// Line sensors
-const int left_sensor = A0;
-const int right_sensor = A1;
-
-// SD CARD
+// ========== SD Card ==========
 #define CS_PIN 4
 
-// COLLISION AVOIDANCE SETTINGS
-#define COLLISION_DISTANCE 20.0  // Stop if obstacle is closer than 15cm
-#define WARNING_DISTANCE 25.0    // Slow down if obstacle is closer than 25cm
+// ========== Collision Avoidance Settings ==========
+#define COLLISION_DISTANCE 20.0   // cm, emergency stop distance
+#define WARNING_DISTANCE 25.0     // cm, reduce speed threshold
 
-// Global variables
-bool drive_mode = true;
-int leftLSValue, rightLSValue;
-int potValue = 60;
+// ========== Control Deadzone ==========
+#define DEADZONE 50  // Ignore small steering input
 
-// Forward declare functions
+// ========== Global State ==========
+bool drive_mode = true;    // True = manual, False = autonomous (line tracking)
+int potValue = 60;         // Default potentiometer value for speed scaling
+
+float prevDistance = 0;       // Previous distance for velocity calc
+float prevVelocity = 0;       // Previous velocity for acceleration calc
+unsigned long prevPhysicsTime = 0;  // Timestamp of last physics update
+
+// ========== Function Prototypes ==========
 void setMotorPins();
-void drive(int, int, int);
+void drive(int throttle, int steering, int potValue);
 void motorBrake();
 void motorSetForward();
 void motorSetBackward();
-void printCoords(int, int);
 float readDistance();
-void lineTracking(int);
+void logAcceleration();
+bool handleCollisionAvoidance(int throttle, float distance);
+void lineTracking(int potValue);
+void printCoords(int throttle, int steering);
 
 void setup() {
-  Serial.begin(9600);   // Initialize USB serial communication
-  SSerial.begin(9600);  // Initialize software serial for BLE communication
-  setMotorPins();       // Configure motor pins for output
+  Serial.begin(9600);
+  SSerial.begin(9600);
+  setMotorPins();  // Set motor pins as outputs
 
-  // Configure line sensor pins as inputs
+  // Set sensor pin modes
   pinMode(left_sensor, INPUT);
   pinMode(right_sensor, INPUT);
-
-  // Configure ultrasonic sensor pins
   pinMode(TRIG_PIN, OUTPUT);
   pinMode(ECHO_PIN, INPUT);
 
-  // Set up card
-  Serial.println("Initializing Card");
-  //CS pin is an output
+  // Initialize SD card
   pinMode(CS_PIN, OUTPUT);
+  Serial.println("Initializing SD Card...");
   if (!SD.begin(CS_PIN)) {
     Serial.println("Card Failure");
     return;
   }
   Serial.println("Card Ready");
+
+  // Create or open the log file and write header if it's new
+  File logFile = SD.open("LOG.csv", FILE_WRITE);
+  if (logFile && logFile.size() == 0) {
+    logFile.println("Time(ms)\tVelocity(m/s)\tAcceleration(m/s^2)\tMaxAccelerationSoFar(m/s^2)");
+    logFile.close();
+  }
 }
 
 void loop() {
-  // Read a message from BLE
-  MicroBlueMessage msg = manager.read();
+  MicroBlueMessage msg = manager.read();  // Read BLE input
 
+  // Debounce mode toggle between manual and autonomous driving
   static unsigned long lastToggleMs = 0;
   const unsigned long debounceMs = 200;
-
-  // Debounce button
-  if (msg.id == "b0") {
-    if (millis() - lastToggleMs > debounceMs) {
-      drive_mode = !drive_mode;
-      Serial.println(drive_mode ? "MANUAL" : "AUTONOMOUS");
-      lastToggleMs = millis();
-    }
+  if (msg.id == "b0" && millis() - lastToggleMs > debounceMs) {
+    drive_mode = !drive_mode;
+    Serial.println(drive_mode ? "MANUAL" : "AUTONOMOUS");
+    lastToggleMs = millis();
   }
 
-  // Read the potentiometer value (0 to 1023)
+  // Update potValue (speed) from slider
   if (msg.id == "sl0") {
     potValue = msg.value.toInt();
     Serial.println(potValue);
   }
 
-  if (drive_mode) {
-    // Bluetooth Joystick
-    if (msg.id == "d1") {
-      int throttle, steering;
-      sscanf(msg.value.c_str(), "%d,%d", &steering, &throttle);
-
-      // Adjust values to center at 0 (assuming incoming range of 0-1023)
-      throttle -= 512;
-      steering -= 512;
-
-      // printCoords(throttle, steering);
-      drive(throttle, steering, potValue);
-    }
-  } else {
+  // MANUAL driving using joystick
+  if (drive_mode && msg.id == "d1") {
+    int throttle, steering;
+    sscanf(msg.value.c_str(), "%d,%d", &steering, &throttle);
+    throttle -= 512;  // Center to 0
+    steering -= 512;
+    drive(throttle, steering, potValue);
+  } 
+  // AUTONOMOUS mode using line sensors
+  else if (!drive_mode) {
     lineTracking(potValue);
   }
 }
 
-// Debug function
+// Debug: print joystick coords
 void printCoords(int throttle, int steering) {
   Serial.print("X (Steering): ");
   Serial.print(steering + 512);
@@ -126,7 +144,7 @@ void printCoords(int throttle, int steering) {
   Serial.println(throttle + 512);
 }
 
-// Initialize motor pins as outputs
+// Set all motor control pins as outputs
 void setMotorPins() {
   pinMode(ENA, OUTPUT);
   pinMode(IN1, OUTPUT);
@@ -136,68 +154,61 @@ void setMotorPins() {
   pinMode(IN4, OUTPUT);
 }
 
-// Improved ultrasonic sensor function
+// Ultrasonic sensor distance in cm
 float readDistance() {
   digitalWrite(TRIG_PIN, LOW);
   delayMicroseconds(2);
   digitalWrite(TRIG_PIN, HIGH);
-  delayMicroseconds(10);  // Increased for better accuracy
+  delayMicroseconds(10);
   digitalWrite(TRIG_PIN, LOW);
 
-  float duration = pulseIn(ECHO_PIN, HIGH, 30000);  // 30ms timeout
+  float duration = pulseIn(ECHO_PIN, HIGH, 30000);  // Timeout after 30ms
+  if (duration == 0) return 999.0;
 
-  if (duration == 0) {
-    return 999.0;  // Return large distance if no echo received
-  }
-
-  float distance = (duration * 0.0343) / 2;  // More accurate speed of sound
-
-  // Serial.print("Distance: ");
-  // Serial.print(distance);
-  // Serial.println(" cm");
-
+  float distance = (duration * 0.0343) / 2;  // Convert to cm
+  Serial.print("Distance: ");
+  Serial.print(distance);
+  Serial.println(" cm");
   return distance;
 }
 
-
-// Modified drive function with collision avoidance
+// If too close, brake and stop driving
 bool handleCollisionAvoidance(int throttle, float distance) {
-  Serial.println(distance);
-
   if (throttle > 0 && distance < COLLISION_DISTANCE) {
     motorBrake();
     Serial.println("COLLISION AVOIDANCE - STOPPING!");
-    return true;  // Stop driving
+    return true;
   }
-
   if (throttle > 0 && distance < WARNING_DISTANCE) {
     Serial.println("WARNING - Obstacle detected, reducing speed");
   }
-
-  return false;  // No need to stop
+  return false;
 }
 
-float prevDistance = 0;
-float prevVelocity = 0;
-unsigned long prevPhysicsTime = 0;
-
-void logAccelerationRealUnits() {
+// Log velocity and acceleration to SD card
+void logAcceleration() {
+  static float maxAcceleration = 0;
   unsigned long currentTime = millis();
-  float currentDistance = readDistance() / 100.0;  // Convert cm to meters
-  float deltaTime = (currentTime - prevPhysicsTime) / 1000.0;  // Convert ms to seconds
+  float currentDistance = readDistance() / 100.0;  // meters
+  float deltaTime = (currentTime - prevPhysicsTime) / 1000.0;  // seconds
 
-  if (deltaTime > 0.1) { // Only update every 100ms
+  if (deltaTime > 0.1) {  // Log every 100ms
     float velocity = (currentDistance - prevDistance) / deltaTime;
     float acceleration = (velocity - prevVelocity) / deltaTime;
 
-    // Log to Serial
+    if (abs(acceleration) > abs(maxAcceleration))
+      maxAcceleration = acceleration;
+
+    // Print to serial
     Serial.print("Velocity: ");
     Serial.print(velocity, 4);
     Serial.print(" m/s\tAcceleration: ");
     Serial.print(acceleration, 4);
+    Serial.print(" m/s^2\tMax Accel: ");
+    Serial.print(maxAcceleration, 4);
     Serial.println(" m/s^2");
 
-    // Log to SD card
+    // Save to SD card
     File logFile = SD.open("LOG.csv", FILE_WRITE);
     if (logFile) {
       logFile.print(currentTime);
@@ -205,86 +216,71 @@ void logAccelerationRealUnits() {
       logFile.print(velocity, 4);
       logFile.print("\t");
       logFile.print(acceleration, 4);
-      logFile.println();
+      logFile.print("\t");
+      logFile.println(maxAcceleration, 4);
       logFile.close();
     }
 
-    // Update previous values
+    // Update for next loop
     prevDistance = currentDistance;
     prevVelocity = velocity;
     prevPhysicsTime = currentTime;
   }
 }
 
-
+// Main drive function with speed/steering logic
 void drive(int throttle, int steering, int potValue) {
-  // Read distance for collision avoidance
+  const int THROTTLE_DEADZONE = 20;
+
   float distance = readDistance();
+  if (handleCollisionAvoidance(throttle, distance)) return;
 
-  // Handle collision
-  if (handleCollisionAvoidance(throttle, distance)) {
-    return;
-  }
-
-  // Map the potentiometer value to a range between 100 and 255 for max speed
-  int maxSpeed = map(potValue, 0, 100, 20, 255);
-
-  // Reduce speed if approaching obstacle while moving forward
-  if (throttle > 0 && distance < WARNING_DISTANCE) {
-    maxSpeed = maxSpeed * 0.5;
-  }
-
-  // Brake if throttle is zero
-  if (throttle == 0) {
+  // Stop if throttle is low
+  if (abs(throttle) < THROTTLE_DEADZONE) {
     motorBrake();
     return;
   }
 
-  // Apply the deadzone to steering
-  if (abs(steering) < DEADZONE) {
-    steering = 0;  // Ignore small steering movements
-  }
+  if (abs(steering) < DEADZONE) steering = 0;
 
-  // Set motor direction based on throttle value
-  if (throttle > 0) {
-    motorSetForward();
-  } else {
-    motorSetBackward();
-  }
+  // Set motor direction
+  throttle > 0 ? motorSetForward() : motorSetBackward();
 
-  // Map throttle to PWM range based on maxSpeed
-  int mappedSpeed = map(abs(throttle), 0, 512, MINIMUM_MOTOR_SPEED, maxSpeed);
+  // Determine max speed based on slider
+  int maxSpeed = map(potValue, 0, 100, 30, 150);
+  if (throttle > 0 && distance < WARNING_DISTANCE)
+    maxSpeed *= 0.5; // reduced max speed by half to prepare for collision
 
-  // Map steering to PWM range
-  int reducedSpeed = map(abs(steering), 0, 512, mappedSpeed, MINIMUM_MOTOR_SPEED);
+  // normal speed
+  int baseSpeed = map(abs(throttle), 0, 512, MINIMUM_MOTOR_SPEED, maxSpeed);
 
-  // Right motor is faster, so reduce its speed
-  int leftMotorSpeed = mappedSpeed;
-  int rightMotorSpeed = 0.65 * mappedSpeed;
+  // turn speed is slower
+  int turnSpeed = map(abs(steering), 0, 512, baseSpeed, MINIMUM_MOTOR_SPEED);
 
-  Serial.println(mappedSpeed);
-  logAcceleration(leftMotorSpeed, rightMotorSpeed);
+  // asign both motors speed to base speed
+  int leftMotorSpeed = baseSpeed;
+  int rightMotorSpeed = baseSpeed;
 
-  // Adjust motor speeds based on steering
-  if (steering > 0) {
-    rightMotorSpeed = reducedSpeed;
-    leftMotorSpeed = mappedSpeed;
-  } else if (steering < 0) {
-    leftMotorSpeed = reducedSpeed;
-    rightMotorSpeed = mappedSpeed;
-  }
+  // Apply turn correction
+  if (steering > 0) rightMotorSpeed = turnSpeed;     // Right turn
+  else if (steering < 0) leftMotorSpeed = turnSpeed; // Left turn
 
-  // Constrain motor speeds
-  leftMotorSpeed = constrain(leftMotorSpeed, MINIMUM_MOTOR_SPEED, maxSpeed);
-  rightMotorSpeed = constrain(rightMotorSpeed, MINIMUM_MOTOR_SPEED, maxSpeed);
+  // Clamp to valid PWM range
+  leftMotorSpeed = constrain(leftMotorSpeed, MINIMUM_MOTOR_SPEED, 255);
+  rightMotorSpeed = constrain(rightMotorSpeed, MINIMUM_MOTOR_SPEED, 255);
 
-  // Set motor speeds
   analogWrite(ENA, leftMotorSpeed);
   analogWrite(ENB, rightMotorSpeed);
+
+  Serial.print("Left PWM: ");
+  Serial.print(leftMotorSpeed);
+  Serial.print(" | Right PWM: ");
+  Serial.println(rightMotorSpeed);
+
+  logAcceleration();  // Log motion physics
 }
 
-
-// stop/brake
+// Stop all motors
 void motorBrake() {
   digitalWrite(ENA, LOW);
   digitalWrite(ENB, LOW);
@@ -294,7 +290,7 @@ void motorBrake() {
   digitalWrite(IN4, LOW);
 }
 
-// move backward
+// Set motors to move backward
 void motorSetBackward() {
   digitalWrite(ENA, HIGH);
   digitalWrite(ENB, HIGH);
@@ -304,7 +300,7 @@ void motorSetBackward() {
   digitalWrite(IN4, HIGH);
 }
 
-// move forward
+// Set motors to move forward
 void motorSetForward() {
   digitalWrite(ENA, HIGH);
   digitalWrite(ENB, HIGH);
@@ -314,35 +310,25 @@ void motorSetForward() {
   digitalWrite(IN4, LOW);
 }
 
-// Line tracking function with corrected logic
+// Line following behavior
 void lineTracking(int potValue) {
-  leftLSValue = digitalRead(left_sensor);
-  rightLSValue = digitalRead(right_sensor);
+  int leftVal = analogRead(left_sensor);
+  int rightVal = analogRead(right_sensor);
 
-  // Use a medium constant speed
-  int throttle = 300;  // Forward throttle
-  int steering = 0;
+  bool leftOnLine = leftVal < LINE_THRESHOLD;
+  bool rightOnLine = rightVal < LINE_THRESHOLD;
 
-  // 0 means white (no line), 1 means black (line detected)
-  if (leftLSValue == 0 && rightLSValue == 0) {
-    // Both sensors see white - robot is on the line, go straight
-    drive(throttle, 0, potValue);
-    Serial.println("Going straight - on line");
-  } else if (leftLSValue == 1 && rightLSValue == 0) {
-    // Left sensor sees black, right sees white
-    // Robot has drifted LEFT off the line, need to turn RIGHT to get back on line
-    steering = 400;
-    drive(throttle, steering, potValue);
-    Serial.println("Turning RIGHT (drifted left off line)");
-  } else if (leftLSValue == 0 && rightLSValue == 1) {
-    // Left sensor sees white, right sees black
-    // Robot has drifted RIGHT off the line, need to turn LEFT to get back on line
-    steering = -400;
-    drive(throttle, steering, potValue);
-    Serial.println("Turning LEFT (drifted right off line)");
-  } else if (leftLSValue == 1 && rightLSValue == 1) {
-    // Both sensors see black - could be intersection, end of line, or very wide line
-    drive(throttle, 0, potValue);
-    Serial.println("Both sensors on black - going straight");
+  if (leftOnLine && rightOnLine) {
+    drive(512, 0, potValue);  // Go straight
+    Serial.println("Straight (both sensors on line)");
+  } else if (leftOnLine) {
+    drive(512, 400, potValue);  // Veer left
+    Serial.println("Left Turn (left sensor on line)");
+  } else if (rightOnLine) {
+    drive(512, -400, potValue);  // Veer right
+    Serial.println("Right Turn (right sensor on line)");
+  } else {
+    motorBrake();  // Stop if line is lost
+    Serial.println("Line lost — braking");
   }
 }
